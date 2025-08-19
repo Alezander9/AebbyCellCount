@@ -28,6 +28,7 @@ function Content() {
   const [error, setError] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string>("");
   const [targetColor, setTargetColor] = useState<string>("#FF2600"); // Default red color
+  const [originalFileName, setOriginalFileName] = useState<string>("");
 
   // Convex actions
   const processCellImageAction = useAction(api.actions.daytona.processCellImage);
@@ -48,12 +49,38 @@ function Content() {
     } : { r: 255, g: 38, b: 0 }; // fallback to default red
   };
 
+  // Function to automatically download the annotated image
+  const downloadAnnotatedImage = (imageBase64: string, originalName: string, cellCount: number) => {
+    // Extract filename without extension
+    const nameWithoutExt = originalName.replace(/\.[^/.]+$/, "");
+    const extension = originalName.includes('.') ? originalName.split('.').pop() : 'png';
+    
+    // Create filename with cell count: {name}_cell_count_{count}_{ext}
+    const filename = `${nameWithoutExt}_cell_count_${cellCount}.${extension}`;
+    
+    // Create download link
+    const link = document.createElement('a');
+    link.href = imageBase64;
+    link.download = filename;
+    link.style.display = 'none';
+    
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    console.log(`[TEMPLOG] Downloaded annotated image as: ${filename}`);
+  };
+
   const handleImageUpload = async (file: File) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       if (e.target?.result) {
         const imageData = e.target.result as string;
         setUploadedImage(imageData);
+        setOriginalFileName(file.name); // Store original filename
+        
+        console.log("[TEMPLOG] Original filename:", file.name);
         
         // Reset previous results
         setAnnotatedImage(null);
@@ -66,6 +93,20 @@ function Content() {
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  // Helper function to estimate processing time based on file size
+  const estimateProcessingTime = (fileSizeBytes: number): string => {
+    const fileSizeMB = fileSizeBytes / (1024 * 1024);
+    const estimatedSeconds = Math.round((fileSizeMB / 10) * 30); // 10MB = 30 seconds linear relationship
+    
+    if (estimatedSeconds < 60) {
+      return `~${estimatedSeconds} seconds`;
+    } else {
+      const minutes = Math.floor(estimatedSeconds / 60);
+      const seconds = estimatedSeconds % 60;
+      return seconds > 0 ? `~${minutes}m ${seconds}s` : `~${minutes} minutes`;
+    }
   };
 
   // Function to process image data
@@ -82,12 +123,16 @@ function Content() {
     console.log("[TEMPLOG] Size check - Current:", imageData.length, "bytes, Limit:", nodejsActionLimit, "bytes");
     console.log("[TEMPLOG] Needs file storage:", imageData.length > nodejsActionLimit);
     
+    // Calculate file size and estimated time for display
+    const fileSizeMB = (imageData.length / (1024 * 1024)).toFixed(1);
+    const estimatedTime = estimateProcessingTime(imageData.length);
+    
     try {
       let result;
       
       if (imageData.length > nodejsActionLimit) {
         console.log("[TEMPLOG] Using file storage approach for large image...");
-        setProcessingStatus("Large image detected, uploading to storage...");
+        setProcessingStatus(`Large image detected (${fileSizeMB}MB), uploading to storage...`);
         
         // Step 1: Get upload URL
         console.log("[TEMPLOG] Generating upload URL...");
@@ -119,7 +164,7 @@ function Content() {
         const storageId = uploadResult.storageId;
         console.log("[TEMPLOG] File uploaded successfully, storage ID:", storageId);
         
-        setProcessingStatus("Processing large image...");
+        setProcessingStatus(`Processing large image (${fileSizeMB}MB, estimated ${estimatedTime})...`);
         
         // Step 3: Process using storage
         console.log("[TEMPLOG] Calling processCellImageFromStorageAction with storage ID:", storageId);
@@ -132,7 +177,7 @@ function Content() {
         
       } else {
         console.log("[TEMPLOG] Using direct approach for small image...");
-        setProcessingStatus("Analyzing cells...");
+        setProcessingStatus(`Analyzing cells (${fileSizeMB}MB)...`);
         
         const rgbColor = hexToRgb(targetColor);
         console.log("[TEMPLOG] Calling processCellImageAction with:", {
@@ -154,7 +199,13 @@ function Content() {
         console.log("SUCCESS! Found", result.cell_count, "cells");
         console.log("Cell locations:", result.cell_locations);
         if (result.annotated_image_base64) {
-          setAnnotatedImage(`data:image/png;base64,${result.annotated_image_base64}`);
+          const annotatedImageUrl = `data:image/png;base64,${result.annotated_image_base64}`;
+          setAnnotatedImage(annotatedImageUrl);
+          
+          // Automatically download the annotated image
+          if (originalFileName && result.cell_count !== undefined) {
+            downloadAnnotatedImage(annotatedImageUrl, originalFileName, result.cell_count);
+          }
         }
         setCellCount(result.cell_count || 0);
       } else {
