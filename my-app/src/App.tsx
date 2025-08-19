@@ -2,6 +2,8 @@
 
 
 import { useState } from "react";
+import { useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
 
 export default function App() {
   return (
@@ -20,15 +22,69 @@ export default function App() {
 
 function Content() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [annotatedImage, setAnnotatedImage] = useState<string | null>(null);
+  const [cellCount, setCellCount] = useState<number | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleImageUpload = (file: File) => {
+  // Convex actions
+  const processCellImageAction = useAction(api.actions.daytona.processCellImage);
+
+
+
+
+
+  const handleImageUpload = async (file: File) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       if (e.target?.result) {
-        setUploadedImage(e.target.result as string);
+        const imageData = e.target.result as string;
+        setUploadedImage(imageData);
+        
+        // Reset previous results
+        setAnnotatedImage(null);
+        setCellCount(null);
+        setError(null);
+        
+        // Automatically start processing the image
+        await processImage(imageData);
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  // Function to process image data
+  const processImage = async (imageData: string) => {
+    console.log("=== PROCESSING UPLOADED IMAGE ===");
+    setIsProcessing(true);
+    
+    try {
+      const result = await processCellImageAction({
+        imageBase64: imageData,
+        targetColor: { r: 255, g: 38, b: 0 } // Default red color
+      });
+      
+      console.log("Image processing result:", result);
+      
+      if (result.success) {
+        console.log("SUCCESS! Found", result.cell_count, "cells");
+        console.log("Cell locations:", result.cell_locations);
+        if (result.annotated_image_base64) {
+          setAnnotatedImage(`data:image/png;base64,${result.annotated_image_base64}`);
+        }
+        setCellCount(result.cell_count);
+      } else {
+        console.error("Image processing failed:", result.error);
+        setError(result.error || "Failed to process image");
+      }
+    } catch (error) {
+      console.error("Error processing image:", error);
+      setError(error instanceof Error ? error.message : "An unexpected error occurred")
+    } finally {
+      setIsProcessing(false);
+    }
+    
+    console.log("=== IMAGE PROCESSING COMPLETE ===");
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -86,10 +142,19 @@ function Content() {
                 <span className="font-medium">Click to upload</span> or drag and drop
                 <br />
                 <span className="text-sm opacity-75">PNG, JPG, JPEG files</span>
+                <br />
+                <span className="text-xs opacity-60 mt-2 block">Images will be processed automatically</span>
               </p>
             </div>
           )}
         </div>
+        {error && (
+          <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+            <p className="text-red-800 dark:text-red-200 text-sm">
+              <span className="font-medium">Error:</span> {error}
+            </p>
+          </div>
+        )}
         <input
           id="file-input"
           type="file"
@@ -101,11 +166,48 @@ function Content() {
 
       {/* Right Panel - Annotated Image */}
       <div className="w-1/2 flex flex-col">
-        <h2 className="text-lg font-semibold mb-4">Annotated Image</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Annotated Image</h2>
+          {cellCount !== null && (
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Cells: {cellCount}
+            </span>
+          )}
+        </div>
         <div className="flex-1 bg-slate-50 dark:bg-slate-800 rounded-lg flex items-center justify-center">
-          <p className="text-slate-600 dark:text-slate-400">
-            annotated image will be put here soon
-          </p>
+          {annotatedImage ? (
+            <img 
+              src={annotatedImage} 
+              alt="Annotated with cell count" 
+              className="max-w-full max-h-full object-contain rounded-lg"
+            />
+          ) : error ? (
+            <div className="text-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400">
+                Failed to process image
+              </p>
+            </div>
+          ) : isProcessing ? (
+            <div className="text-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400">
+                Analyzing cells...
+              </p>
+            </div>
+          ) : (
+            <div className="text-center">
+              <p className="text-slate-600 dark:text-slate-400">
+                Upload an image to see annotated results
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

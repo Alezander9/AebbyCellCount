@@ -14,9 +14,12 @@
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.81",
+    "@daytonaio/sdk": "^0.25.5",
     "convex": "^1.23.0",
+    "path-browserify-win32": "^2.0.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "vite-plugin-node-polyfills": "^0.24.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",

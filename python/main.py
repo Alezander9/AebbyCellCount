@@ -1,3 +1,6 @@
+# No longer used, all python code is not in convex/actions/daytona.ts
+
+
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
