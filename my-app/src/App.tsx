@@ -7,14 +7,14 @@ import { api } from "../convex/_generated/api";
 
 export default function App() {
   return (
-    <>
-      <header className="sticky top-0 z-10 bg-light dark:bg-dark p-4 border-b-2 border-slate-200 dark:border-slate-800">
+    <div className="h-screen flex flex-col overflow-hidden">
+      <header className="flex-shrink-0 bg-light dark:bg-dark p-4 border-b-2 border-slate-200 dark:border-slate-800">
         <h1 className="text-xl font-bold text-center">Aebby Cell Counter</h1>
       </header>
-      <main className="p-8">
+      <main className="flex-1 p-8 min-h-0">
         <Content />
       </main>
-    </>
+    </div>
   );
 }
 
@@ -28,7 +28,6 @@ function Content() {
   const [error, setError] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string>("");
   const [targetColor, setTargetColor] = useState<string>("#FF2600"); // Default red color
-  const [originalFileName, setOriginalFileName] = useState<string>("");
 
   // Convex actions
   const processCellImageAction = useAction(api.actions.daytona.processCellImage);
@@ -49,28 +48,7 @@ function Content() {
     } : { r: 255, g: 38, b: 0 }; // fallback to default red
   };
 
-  // Function to automatically download the annotated image
-  const downloadAnnotatedImage = (imageBase64: string, originalName: string, cellCount: number) => {
-    // Extract filename without extension
-    const nameWithoutExt = originalName.replace(/\.[^/.]+$/, "");
-    const extension = originalName.includes('.') ? originalName.split('.').pop() : 'png';
-    
-    // Create filename with cell count: {name}_cell_count_{count}_{ext}
-    const filename = `${nameWithoutExt}_cell_count_${cellCount}.${extension}`;
-    
-    // Create download link
-    const link = document.createElement('a');
-    link.href = imageBase64;
-    link.download = filename;
-    link.style.display = 'none';
-    
-    // Trigger download
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    console.log(`[TEMPLOG] Downloaded annotated image as: ${filename}`);
-  };
+
 
   const handleImageUpload = async (file: File) => {
     const reader = new FileReader();
@@ -78,9 +56,6 @@ function Content() {
       if (e.target?.result) {
         const imageData = e.target.result as string;
         setUploadedImage(imageData);
-        setOriginalFileName(file.name); // Store original filename
-        
-        console.log("[TEMPLOG] Original filename:", file.name);
         
         // Reset previous results
         setAnnotatedImage(null);
@@ -201,11 +176,6 @@ function Content() {
         if (result.annotated_image_base64) {
           const annotatedImageUrl = `data:image/png;base64,${result.annotated_image_base64}`;
           setAnnotatedImage(annotatedImageUrl);
-          
-          // Automatically download the annotated image
-          if (originalFileName && result.cell_count !== undefined) {
-            downloadAnnotatedImage(annotatedImageUrl, originalFileName, result.cell_count);
-          }
         }
         setCellCount(result.cell_count || 0);
       } else {
@@ -243,10 +213,11 @@ function Content() {
   };
 
   return (
-    <div className="flex gap-8 h-[calc(100vh-120px)]">
+    <div className="h-full grid grid-cols-2 gap-8">
       {/* Left Panel - Image Upload */}
-      <div className="w-1/2 flex flex-col">
-        <div className="flex items-center justify-between mb-4">
+      <div className="grid grid-rows-[auto_1fr_auto] gap-4 min-h-0">
+        {/* Header Row */}
+        <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Upload Image</h2>
           <div className="flex items-center gap-2">
             <label htmlFor="color-picker" className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -265,8 +236,10 @@ function Content() {
             </span>
           </div>
         </div>
+        
+        {/* Image Container Row */}
         <div 
-          className="flex-1 bg-blue-50 dark:bg-blue-900/20 border-2 border-dashed border-blue-300 dark:border-blue-600 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors overflow-hidden"
+          className="bg-blue-50 dark:bg-blue-900/20 border-2 border-dashed border-blue-300 dark:border-blue-600 rounded-lg cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors relative overflow-hidden min-h-0"
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onClick={() => document.getElementById('file-input')?.click()}
@@ -275,11 +248,10 @@ function Content() {
             <img 
               src={uploadedImage} 
               alt="Uploaded" 
-              className="max-w-full max-h-full object-contain rounded-lg"
-              style={{ maxHeight: '100%', maxWidth: '100%' }}
+              className="absolute inset-0 w-full h-full object-contain rounded-lg"
             />
           ) : (
-            <div className="flex flex-col items-center gap-4 text-blue-600 dark:text-blue-400">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-blue-600 dark:text-blue-400">
               <svg 
                 className="w-16 h-16" 
                 fill="none" 
@@ -303,13 +275,16 @@ function Content() {
             </div>
           )}
         </div>
+        
+        {/* Error Row (conditional) */}
         {error && (
-          <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
             <p className="text-red-800 dark:text-red-200 text-sm">
               <span className="font-medium">Error:</span> {error}
             </p>
           </div>
         )}
+        
         <input
           id="file-input"
           type="file"
@@ -320,8 +295,9 @@ function Content() {
       </div>
 
       {/* Right Panel - Annotated Image */}
-      <div className="w-1/2 flex flex-col">
-        <div className="flex justify-between items-center mb-4">
+      <div className="grid grid-rows-[auto_1fr] gap-4 min-h-0">
+        {/* Header Row */}
+        <div className="flex justify-between items-center">
           <h2 className="text-lg font-semibold">Annotated Image</h2>
           {cellCount !== null && (
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -329,38 +305,46 @@ function Content() {
             </span>
           )}
         </div>
-        <div className="flex-1 bg-slate-50 dark:bg-slate-800 rounded-lg flex items-center justify-center">
+        
+        {/* Image Container Row */}
+        <div className="bg-slate-50 dark:bg-slate-800 rounded-lg relative overflow-hidden min-h-0">
           {annotatedImage ? (
             <img 
               src={annotatedImage} 
               alt="Annotated with cell count" 
-              className="max-w-full max-h-full object-contain rounded-lg"
+              className="absolute inset-0 w-full h-full object-contain rounded-lg"
             />
           ) : error ? (
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400">
+                  Failed to process image
+                </p>
               </div>
-              <p className="text-slate-600 dark:text-slate-400">
-                Failed to process image
-              </p>
             </div>
           ) : isProcessing ? (
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
-                <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400">
+                  {processingStatus || "Analyzing cells..."}
+                </p>
               </div>
-              <p className="text-slate-600 dark:text-slate-400">
-                {processingStatus || "Analyzing cells..."}
-              </p>
             </div>
           ) : (
-            <div className="text-center">
-              <p className="text-slate-600 dark:text-slate-400">
-                Upload an image to see annotated results
-              </p>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-slate-600 dark:text-slate-400">
+                  Upload an image to see annotated results
+                </p>
+              </div>
             </div>
           )}
         </div>
