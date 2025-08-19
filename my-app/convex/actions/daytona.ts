@@ -32,7 +32,7 @@ export const compressImage = action({
     maxHeight: v.optional(v.number()),
     quality: v.optional(v.number())
   },
-  handler: async (ctx, { imageBase64, maxWidth = 1200, maxHeight = 1200, quality = 85 }): Promise<CompressionResult> => {
+  handler: async (_ctx, { imageBase64, maxWidth = 1200, maxHeight = 1200, quality = 85 }): Promise<CompressionResult> => {
     console.log("=== COMPRESSING IMAGE ===");
     console.log("[COMPRESSION] Original size:", imageBase64.length);
     
@@ -367,7 +367,7 @@ export const processCellImage = action({
       b: v.number()
     }))
   },
-  handler: async (ctx, { imageBase64, targetColor = { r: 255, g: 38, b: 0 } }): Promise<ProcessingResult> => {
+  handler: async (_ctx, { imageBase64, targetColor = { r: 255, g: 38, b: 0 } }): Promise<ProcessingResult> => {
     console.log("=== PROCESSING CELL IMAGE ===");
     console.log("[TEMPLOG] Received imageBase64 length:", imageBase64.length);
     console.log("[TEMPLOG] Received imageBase64 prefix:", imageBase64.substring(0, 100));
