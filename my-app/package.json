@@ -19,6 +19,7 @@
     "path-browserify-win32": "^2.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "sharp": "^0.34.3",
     "vite-plugin-node-polyfills": "^0.24.0"
   },
   "devDependencies": {
@@ -27,6 +28,7 @@
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
+    "@types/sharp": "^0.31.1",
     "@vitejs/plugin-react": "^4.3.4",
     "dotenv": "^16.4.7",
     "eslint": "^9.21.0",

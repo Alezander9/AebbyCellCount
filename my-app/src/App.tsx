@@ -2,7 +2,7 @@
 
 
 import { useState } from "react";
-import { useAction } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 
 export default function App() {
@@ -26,13 +26,27 @@ function Content() {
   const [cellCount, setCellCount] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string>("");
+  const [targetColor, setTargetColor] = useState<string>("#FF2600"); // Default red color
 
   // Convex actions
   const processCellImageAction = useAction(api.actions.daytona.processCellImage);
+  const processCellImageFromStorageAction = useAction(api.actions.daytona.processCellImageFromStorage);
+  const generateUploadUrlMutation = useMutation(api.mutations.files.generateUploadUrl);
 
 
 
 
+
+  // Helper function to convert hex color to RGB
+  const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 255, g: 38, b: 0 }; // fallback to default red
+  };
 
   const handleImageUpload = async (file: File) => {
     const reader = new FileReader();
@@ -45,6 +59,7 @@ function Content() {
         setAnnotatedImage(null);
         setCellCount(null);
         setError(null);
+        setProcessingStatus("");
         
         // Automatically start processing the image
         await processImage(imageData);
@@ -56,14 +71,83 @@ function Content() {
   // Function to process image data
   const processImage = async (imageData: string) => {
     console.log("=== PROCESSING UPLOADED IMAGE ===");
+    console.log("[TEMPLOG] Image data length:", imageData.length);
+    console.log("[TEMPLOG] Image data prefix:", imageData.substring(0, 100));
+    console.log("[TEMPLOG] Image data contains comma:", imageData.includes(','));
+    console.log("[TEMPLOG] Image data MIME type:", imageData.split(',')[0]);
     setIsProcessing(true);
     
+    // Check if we need to use file storage (Node.js actions have 5MB limit)
+    const nodejsActionLimit = 4 * 1024 * 1024; // 4MB to stay under 5MB limit
+    console.log("[TEMPLOG] Size check - Current:", imageData.length, "bytes, Limit:", nodejsActionLimit, "bytes");
+    console.log("[TEMPLOG] Needs file storage:", imageData.length > nodejsActionLimit);
+    
     try {
-      const result = await processCellImageAction({
-        imageBase64: imageData,
-        targetColor: { r: 255, g: 38, b: 0 } // Default red color
-      });
+      let result;
       
+      if (imageData.length > nodejsActionLimit) {
+        console.log("[TEMPLOG] Using file storage approach for large image...");
+        setProcessingStatus("Large image detected, uploading to storage...");
+        
+        // Step 1: Get upload URL
+        console.log("[TEMPLOG] Generating upload URL...");
+        const uploadUrl = await generateUploadUrlMutation();
+        
+        // Step 2: Convert base64 to blob and upload
+        console.log("[TEMPLOG] Converting to blob and uploading...");
+        const base64Data = imageData.split(',')[1];
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'image/png' });
+        
+        console.log("[TEMPLOG] Blob size:", blob.size, "bytes");
+        
+        const uploadResponse = await fetch(uploadUrl, {
+          method: 'POST',
+          body: blob,
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+        }
+        
+        const uploadResult = await uploadResponse.json();
+        const storageId = uploadResult.storageId;
+        console.log("[TEMPLOG] File uploaded successfully, storage ID:", storageId);
+        
+        setProcessingStatus("Processing large image...");
+        
+        // Step 3: Process using storage
+        console.log("[TEMPLOG] Calling processCellImageFromStorageAction with storage ID:", storageId);
+        const rgbColor = hexToRgb(targetColor);
+        console.log("[TEMPLOG] Using target color:", rgbColor, "from hex:", targetColor);
+        result = await processCellImageFromStorageAction({
+          storageId,
+          targetColor: rgbColor
+        });
+        
+      } else {
+        console.log("[TEMPLOG] Using direct approach for small image...");
+        setProcessingStatus("Analyzing cells...");
+        
+        const rgbColor = hexToRgb(targetColor);
+        console.log("[TEMPLOG] Calling processCellImageAction with:", {
+          imageBase64Length: imageData.length,
+          targetColor: rgbColor
+        });
+        console.log("[TEMPLOG] Using target color:", rgbColor, "from hex:", targetColor);
+        
+        result = await processCellImageAction({
+          imageBase64: imageData,
+          targetColor: rgbColor
+        });
+      }
+      
+      console.log("[TEMPLOG] Raw result from action:", result);
       console.log("Image processing result:", result);
       
       if (result.success) {
@@ -72,7 +156,7 @@ function Content() {
         if (result.annotated_image_base64) {
           setAnnotatedImage(`data:image/png;base64,${result.annotated_image_base64}`);
         }
-        setCellCount(result.cell_count);
+        setCellCount(result.cell_count || 0);
       } else {
         console.error("Image processing failed:", result.error);
         setError(result.error || "Failed to process image");
@@ -82,6 +166,7 @@ function Content() {
       setError(error instanceof Error ? error.message : "An unexpected error occurred")
     } finally {
       setIsProcessing(false);
+      setProcessingStatus("");
     }
     
     console.log("=== IMAGE PROCESSING COMPLETE ===");
@@ -110,9 +195,27 @@ function Content() {
     <div className="flex gap-8 h-[calc(100vh-120px)]">
       {/* Left Panel - Image Upload */}
       <div className="w-1/2 flex flex-col">
-        <h2 className="text-lg font-semibold mb-4">Upload Image</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Upload Image</h2>
+          <div className="flex items-center gap-2">
+            <label htmlFor="color-picker" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Target Color:
+            </label>
+            <input
+              id="color-picker"
+              type="color"
+              value={targetColor}
+              onChange={(e) => setTargetColor(e.target.value)}
+              className="w-8 h-8 rounded border border-slate-300 dark:border-slate-600 cursor-pointer"
+              title="Select the color of cells to detect"
+            />
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+              {targetColor.toUpperCase()}
+            </span>
+          </div>
+        </div>
         <div 
-          className="flex-1 bg-blue-50 dark:bg-blue-900/20 border-2 border-dashed border-blue-300 dark:border-blue-600 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+          className="flex-1 bg-blue-50 dark:bg-blue-900/20 border-2 border-dashed border-blue-300 dark:border-blue-600 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors overflow-hidden"
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onClick={() => document.getElementById('file-input')?.click()}
@@ -122,6 +225,7 @@ function Content() {
               src={uploadedImage} 
               alt="Uploaded" 
               className="max-w-full max-h-full object-contain rounded-lg"
+              style={{ maxHeight: '100%', maxWidth: '100%' }}
             />
           ) : (
             <div className="flex flex-col items-center gap-4 text-blue-600 dark:text-blue-400">
@@ -198,7 +302,7 @@ function Content() {
                 <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
               </div>
               <p className="text-slate-600 dark:text-slate-400">
-                Analyzing cells...
+                {processingStatus || "Analyzing cells..."}
               </p>
             </div>
           ) : (

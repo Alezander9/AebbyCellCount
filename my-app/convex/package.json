@@ -8,5 +8,11 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "sharp": "^0.33.1"
+  },
+  "devDependencies": {
+    "@types/sharp": "^0.32.0"
+  }
 }
